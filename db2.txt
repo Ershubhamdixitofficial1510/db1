@@ -1,0 +1,61 @@
+from flask import Flask, jsonify, request, make_response
+from flask_pymongo import PyMongo
+import csv
+from bson.json_util import dumps
+
+app = Flask(_name_)
+app.config["MONGO_URI"] = "mongodb://localhost:27017/test"
+mongo = PyMongo(app)
+
+@app.route("/users", methods=["GET"])
+def get_users():
+    page = request.args.get("page", default=1, type=int)
+    users = mongo.db.users.find().skip((page-1)*10).limit(10)
+    return dumps(users)
+
+@app.route("/users", methods=["POST"])
+def create_user():
+    name = request.json["name"]
+    password = request.json["password"]
+    role = request.json.get("role", "user")
+    user_id = mongo.db.users.insert_one({
+        "name": name,
+        "password": password,
+        "role": role
+    }).inserted_id
+    return jsonify({"id": str(user_id)})
+
+@app.route("/users/<id>", methods=["GET"])
+def get_user(id):
+    user = mongo.db.users.find_one({"_id": id})
+    if not user:
+        return "User not found", 404
+    return dumps(user)
+
+@app.route("/users/<id>", methods=["PUT"])
+def update_user(id):
+    name = request.json.get("name")
+    password = request.json.get("password")
+    role = request.json.get("role")
+    mongo.db.users.update_one({"_id": id}, {"$set": {
+        "name": name,
+        "password": password,
+        "role": role
+    }})
+    return "User updated"
+
+@app.route("/users/<id>", methods=["DELETE"])
+def delete_user(id):
+    mongo.db.users.delete_one({"_id": id})
+    return "User deleted"
+
+@app.route("/users/export", methods=["GET"])
+def export_users():
+    users = list(mongo.db.users.find())
+    response = make_response(dumps(users))
+    response.headers["Content-Disposition"] = "attachment; filename=users.csv"
+    response.headers["Content-Type"] = "text/csv"
+    return response
+
+if _name_ == "_main_":
+    app.run(debug=True)
